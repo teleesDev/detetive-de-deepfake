@@ -26,9 +26,9 @@ HTML5, CSS3, JavaScript e SVG.
 
 | Nome | RA |
 | --- | --- |
-| Guilherme Gomes Arantes Teles | 10364065 |
 | Bernardo Souza Oliveira | 10312871 |
 | Camila da Silva Souza | 10435073 |
+| Guilherme Gomes Arantes Teles | 10364065 |
 
 Orientação: Prof. Dr. Marcelo Teixeira de Azevedo
 
