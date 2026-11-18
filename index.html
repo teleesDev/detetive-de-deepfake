@@ -1,0 +1,508 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><title>Detetive de Deepfake</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: mesa de perícia. Coluna de evidência (o "celular" ou a tela) ao lado de um painel de laudo; empilha no celular. */
+:root{
+  --bg:#eef1f4; --panel:#ffffff; --ink:#16202b; --muted:#5b6876; --line:#d5dbe2;
+  --accent:#c8102e; --accent-ink:#ffffff; --accent-soft:#fbe6e9;
+  --ok:#1f7a4d; --ok-soft:#e2f3ea; --warn:#a15c00; --warn-soft:#fdf0dc;
+  --phone:#e9e4dc; --bubble-in:#ffffff; --bubble-out:#d9f6c9; --scan:rgba(200,16,46,.08);
+  --f-display:"Chakra Petch", "Segoe UI", system-ui, sans-serif;
+  --f-body:"Figtree", "Segoe UI", system-ui, sans-serif;
+  --f-mono:"JetBrains Mono", ui-monospace, Consolas, monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f151c; --panel:#18212b; --ink:#e6ebf0; --muted:#9aa6b3; --line:#2b3642;
+  --accent:#ff4d63; --accent-ink:#1a0207; --accent-soft:#3a1a20;
+  --ok:#5fd39a; --ok-soft:#173226; --warn:#f0b35a; --warn-soft:#3a2a12;
+  --phone:#1d2329; --bubble-in:#26313b; --bubble-out:#1f4a33; --scan:rgba(255,77,99,.10);
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f151c; --panel:#18212b; --ink:#e6ebf0; --muted:#9aa6b3; --line:#2b3642;
+  --accent:#ff4d63; --accent-ink:#1a0207; --accent-soft:#3a1a20;
+  --ok:#5fd39a; --ok-soft:#173226; --warn:#f0b35a; --warn-soft:#3a2a12;
+  --phone:#1d2329; --bubble-in:#26313b; --bubble-out:#1f4a33; --scan:rgba(255,77,99,.10);
+  color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:16px/1.55 var(--f-body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 40px}
+.wrap{max-width:1080px;margin:0 auto}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0;line-height:1.15}
+button{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.mono{font-family:var(--f-mono)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.label{font:600 12px/1 var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+
+/* barra superior */
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:20px}
+.brand{display:flex;align-items:center;gap:10px;font:700 18px var(--f-display)}
+.seal{width:34px;height:34px;border-radius:50%;border:2px solid var(--accent);display:grid;place-items:center;color:var(--accent);font:700 13px var(--f-mono)}
+.stats{display:flex;gap:8px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:6px 12px;font:600 13px var(--f-mono);font-variant-numeric:tabular-nums}
+.chip b{color:var(--accent)}
+.prog{height:4px;background:var(--line);border-radius:4px;overflow:hidden;margin-bottom:22px}
+.prog i{display:block;height:100%;background:var(--accent);width:0;transition:width .4s}
+
+/* intro */
+.intro{display:grid;grid-template-columns:1.2fr 1fr;gap:32px;align-items:center}
+.intro h1{font-size:clamp(34px,6vw,58px);letter-spacing:-.01em}
+.intro h1 em{font-style:normal;color:var(--accent);position:relative}
+.lede{font-size:18px;color:var(--muted);max-width:56ch;margin:16px 0 22px}
+.steps{list-style:none;padding:0;margin:0 0 26px;display:grid;gap:10px;counter-reset:s}
+.steps li{display:grid;grid-template-columns:30px 1fr;gap:10px;align-items:start;counter-increment:s}
+.steps li::before{content:counter(s);width:26px;height:26px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font:700 13px var(--f-mono)}
+.btn{border:0;border-radius:var(--r);padding:13px 22px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:8px}
+.btn-main{background:var(--accent);color:var(--accent-ink)}
+.btn-main:hover{filter:brightness(1.07)}
+.btn-ghost{background:transparent;border:1.5px solid var(--line)}
+.btn-ghost:hover{border-color:var(--muted)}
+.btn-ok{background:var(--ok);color:var(--panel)}
+.dossier{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;position:relative;overflow:hidden}
+.dossier::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent 0 22px,var(--scan) 22px 23px);pointer-events:none}
+.dossier h3{font-size:15px;margin-bottom:12px}
+.case-list{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.case-list li{display:flex;justify-content:space-between;gap:10px;font-size:14px;border-bottom:1px dashed var(--line);padding-bottom:7px}
+.case-list span:last-child{font-family:var(--f-mono);color:var(--muted);font-size:12px;white-space:nowrap}
+
+/* tela de caso */
+.case{display:grid;grid-template-columns:minmax(0,420px) minmax(0,1fr);gap:28px;align-items:start}
+.evidence{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:14px;position:relative}
+.ev-tag{position:absolute;top:-11px;left:16px;background:var(--accent);color:var(--accent-ink);font:700 11px var(--f-mono);letter-spacing:.08em;padding:4px 9px;border-radius:4px}
+.brief h2{font-size:clamp(24px,3.4vw,32px);margin:6px 0 10px}
+.brief p{color:var(--muted);margin:0 0 14px;max-width:60ch}
+.hint{display:flex;gap:10px;align-items:flex-start;background:var(--warn-soft);color:var(--ink);border-radius:var(--r);padding:12px 14px;font-size:14px;margin-bottom:18px}
+.hint svg{flex:none;color:var(--warn);margin-top:2px}
+.counter{font:600 14px var(--f-mono);margin-bottom:18px}
+.counter b{color:var(--accent)}
+.verdict{display:flex;gap:10px;flex-wrap:wrap}
+.verdict .btn{flex:1 1 180px;justify-content:center;padding:15px}
+
+/* hotspots */
+.hs{all:unset;display:block;cursor:pointer;border-radius:8px;outline:2px dashed transparent;outline-offset:2px;position:relative;transition:outline-color .15s, background .15s}
+.hs:hover{outline-color:var(--muted)}
+.hs:focus-visible{outline:3px solid var(--accent)}
+.hs.marked{outline:2px solid var(--accent);background:var(--accent-soft)}
+.hs.marked::after{content:"?";position:absolute;top:-10px;right:-10px;width:22px;height:22px;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font:700 12px var(--f-mono)}
+.reveal .hs{cursor:default}
+.reveal .hs.r-found{outline:2px solid var(--accent);background:var(--accent-soft)}
+.reveal .hs.r-found::after,.reveal .hs.r-false::after{position:absolute;top:-10px;right:-10px;width:22px;height:22px;border-radius:50%;color:var(--accent-ink);display:grid;place-items:center;font:700 12px var(--f-mono)}
+.reveal .hs.r-found::after{content:"✓";background:var(--accent)}
+.reveal .hs.r-miss{outline:2px dashed var(--accent)}
+.reveal .hs.r-miss::after{content:"!";position:absolute;top:-10px;right:-10px;width:22px;height:22px;border-radius:50%;background:var(--panel);border:2px solid var(--accent);color:var(--accent);display:grid;place-items:center;font:700 12px var(--f-mono)}
+.reveal .hs.r-false{outline:2px solid var(--warn);background:var(--warn-soft)}
+.reveal .hs.r-false::after{content:"×";background:var(--warn)}
+.reveal .hs.r-okseen{outline:2px solid var(--ok);background:var(--ok-soft)}
+.reveal .hs.r-okseen::after{content:"✓";position:absolute;top:-10px;right:-10px;width:22px;height:22px;border-radius:50%;background:var(--ok);color:var(--panel);display:grid;place-items:center;font:700 12px var(--f-mono)}
+
+/* mocks: chat */
+.phone{background:var(--phone);border-radius:12px;overflow:hidden}
+.ph-head{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--panel);border-bottom:1px solid var(--line)}
+.av{width:36px;height:36px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-weight:700;flex:none}
+.ph-name{font-weight:700;font-size:15px;line-height:1.2}
+.ph-sub{font-size:12px;color:var(--muted)}
+.chat{padding:12px;display:flex;flex-direction:column;gap:8px}
+.msg{max-width:85%;padding:8px 11px;border-radius:10px;font-size:14px;background:var(--bubble-in);box-shadow:0 1px 0 rgba(0,0,0,.06)}
+.msg small{display:block;text-align:right;font-size:11px;color:var(--muted);margin-top:2px}
+.msg.out{align-self:flex-end;background:var(--bubble-out)}
+.chat>.hs{align-self:flex-start;max-width:85%}
+.chat>.hs .msg{max-width:100%}
+.sys{align-self:center;font-size:12px;background:var(--warn-soft);border-radius:8px;padding:5px 10px;text-align:center}
+.audio{display:flex;align-items:center;gap:10px}
+.play{width:30px;height:30px;border-radius:50%;background:var(--ok);color:var(--panel);display:grid;place-items:center;flex:none}
+.wave{display:flex;gap:2px;align-items:center;height:22px;flex:1}
+.wave i{display:block;width:3px;border-radius:2px;background:var(--muted)}
+.transcript{font-size:13px;color:var(--muted);font-style:italic;border-left:3px solid var(--line);padding-left:8px;margin-top:6px}
+
+/* feed / anúncio */
+.post{background:var(--panel);border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+.post-head{display:flex;gap:10px;align-items:center;padding:10px 12px}
+.post-media{aspect-ratio:4/3;max-width:100%;position:relative;background:linear-gradient(160deg,#1d3557,#457b9d);color:#fff;display:flex;flex-direction:column;justify-content:flex-end;padding:14px}
+.post-media .big{font:700 22px/1.15 var(--f-display);text-shadow:0 2px 8px rgba(0,0,0,.4)}
+.post-media .cap{font-size:12px;background:rgba(0,0,0,.55);padding:4px 8px;border-radius:4px;align-self:flex-start;margin-top:8px}
+.post-body{padding:10px 12px;font-size:14px;display:grid;gap:8px}
+.cta{background:var(--ink);color:var(--panel);text-align:center;border-radius:8px;padding:9px;font-weight:700;font-size:14px}
+.facecard{position:absolute;top:14px;left:14px;display:flex;gap:8px;align-items:center;background:rgba(0,0,0,.45);padding:6px 10px 6px 6px;border-radius:999px;font-size:12px}
+.facecard .av{width:28px;height:28px;background:#f1c6a8;color:#5a3b28;font-size:12px}
+
+/* e-mail */
+.mail{background:var(--panel);border:1px solid var(--line);border-radius:12px;font-size:14px;overflow:hidden}
+.mail-head{padding:12px 14px;border-bottom:1px solid var(--line);display:grid;gap:4px}
+.mail-subj{font-weight:700;font-size:16px}
+.mail-body{padding:14px;display:grid;gap:10px}
+.mail-btn{background:var(--accent);color:var(--accent-ink);border-radius:6px;padding:10px;text-align:center;font-weight:700}
+.url{font:12px var(--f-mono);color:var(--muted);word-break:break-all}
+
+/* tela final e feedback */
+.fb{margin-top:20px;display:grid;gap:14px}
+.fb-head{display:flex;gap:12px;align-items:center;padding:14px 16px;border-radius:var(--r)}
+.fb-head.good{background:var(--ok-soft)}
+.fb-head.bad{background:var(--accent-soft)}
+.fb-head .ico{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;font:700 18px var(--f-mono);flex:none}
+.good .ico{background:var(--ok);color:var(--panel)}
+.bad .ico{background:var(--accent);color:var(--accent-ink)}
+.fb-head h3{font-size:18px}
+.fb-head p{margin:2px 0 0;font-size:14px;color:var(--muted)}
+.flags{list-style:none;padding:0;margin:0;display:grid;gap:8px}
+.flags li{display:grid;grid-template-columns:22px 1fr;gap:10px;font-size:14px;align-items:start}
+.dot{width:18px;height:18px;border-radius:50%;margin-top:3px}
+.dot.red{background:var(--accent)} .dot.green{background:var(--ok)} .dot.amber{background:var(--warn)}
+.flags b{display:block}
+.todo{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px}
+.todo h4{margin:0 0 6px;font:700 13px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.todo p{margin:0;font-size:14px}
+.pts{font:700 14px var(--f-mono);color:var(--accent)}
+
+.final{display:grid;grid-template-columns:1fr 1fr;gap:28px;align-items:start}
+.score{font:700 clamp(54px,10vw,92px)/1 var(--f-display);color:var(--accent);font-variant-numeric:tabular-nums}
+.rank{display:inline-block;margin-top:8px;border:2px solid var(--accent);color:var(--accent);font:700 14px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;padding:6px 12px;border-radius:6px;transform:rotate(-2deg)}
+.result-list{list-style:none;margin:16px 0 0;padding:0;display:grid;gap:6px}
+.result-list li{display:flex;justify-content:space-between;gap:10px;font-size:14px;border-bottom:1px dashed var(--line);padding-bottom:6px}
+.check{list-style:none;padding:0;margin:10px 0 0;display:grid;gap:10px}
+.check label{display:flex;gap:10px;align-items:flex-start;font-size:15px;cursor:pointer}
+.check input{width:18px;height:18px;accent-color:var(--accent);margin-top:3px;flex:none}
+footer{margin-top:36px;font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:12px}
+
+@media (max-width:820px){.intro,.case,.final{grid-template-columns:1fr}.evidence{max-width:460px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+.fadein{animation:fi .35s ease both}
+@keyframes fi{from{opacity:.4;transform:translateY(6px)}to{opacity:1;transform:none}}
+</style>
+
+<div class="wrap">
+  <div class="top">
+    <div class="brand"><span class="seal">DF</span> Detetive de Deepfake</div>
+    <div class="stats" id="stats" hidden>
+      <span class="chip">Caso <b id="sCase">1</b>/<span id="sTotal">7</span></span>
+      <span class="chip"><b id="sXp">0</b> XP</span>
+    </div>
+  </div>
+  <div class="prog" id="prog" hidden><i id="progBar"></i></div>
+  <main id="app"></main>
+  <footer>Protótipo do projeto de extensão MackSeguro, temática Deepfakes e IA Generativa. Todos os nomes, perfis, números e empresas são fictícios e foram criados para fins educativos.</footer>
+</div>
+
+<script>
+const CASES = [
+{
+  id:"audio", title:"O áudio da filha", tipo:"Clonagem de voz",
+  context:"Dona Célia recebe esta conversa no WhatsApp numa terça à tarde. A voz no áudio é idêntica à da filha dela.",
+  golpe:true,
+  mock:()=>`
+  <div class="phone">
+    <div class="ph-head">
+      <div class="av">J</div>
+      ${hs("num",`<div><div class="ph-name">+55 11 9 4821-3307</div><div class="ph-sub">Número não salvo nos contatos</div></div>`)}
+    </div>
+    <div class="chat">
+      <div class="msg">Oi mãe, sou eu a Júlia. Troquei de número, salva esse aí <small>14:02</small></div>
+      <div class="msg">
+        <div class="audio"><span class="play">▶</span><span class="wave">${wave(26)}</span><span class="mono" style="font-size:12px">0:12</span></div>
+        <div class="transcript">"Mãe, me ajuda, deu um problema aqui e eu preciso pagar hoje, senão vai dar ruim, depois eu te explico tudo."</div>
+        <small>14:03</small>
+      </div>
+      ${hs("pix",`<div class="msg">Faz um Pix de R$ 1.850 pra essa chave, é do Marcos que tá me ajudando: <span class="mono">marcos.rsilva.pg@gmail.com</span> <small>14:03</small></div>`)}
+      ${hs("call",`<div class="msg">Não consigo atender ligação agora, tô sem sinal pra chamada, só mensagem <small>14:04</small></div>`)}
+      <div class="msg out">Filha? Tá tudo bem? <small>14:05</small></div>
+    </div>
+  </div>`,
+  flags:{
+    num:{red:true,t:"Número novo sem confirmação",d:"A troca de número é o começo de quase todo golpe do falso parente. A voz pode ter sido clonada com poucos segundos de áudio tirados de vídeos públicos."},
+    pix:{red:true,t:"Pix urgente para a conta de outra pessoa",d:"Pedido de dinheiro com pressa, para uma chave em nome de um terceiro, é o objetivo final do golpe."},
+    call:{red:true,t:"Recusa em fazer chamada",d:"Quem aplica o golpe evita ligação ou vídeo ao vivo, porque o áudio clonado é gravado antes e não consegue conversar de verdade."}
+  },
+  todo:"Desligue a conversa e ligue para o número antigo da pessoa, ou para alguém próximo dela. Combine com a família uma palavra-segura que só vocês conhecem e peça essa palavra sempre que houver pedido de dinheiro."
+},
+{
+  id:"anuncio", title:"O famoso que indica investimento", tipo:"Vídeo deepfake em anúncio",
+  context:"Rolando o feed, aparece um vídeo patrocinado em que um apresentador muito conhecido da TV recomenda um aplicativo.",
+  golpe:true,
+  mock:()=>`
+  <div class="post">
+    ${hs("perfil",`<div class="post-head"><div class="av">IB</div><div><div class="ph-name">investbrasil_oficial.app2</div><div class="ph-sub">Patrocinado · conta criada há 6 dias</div></div></div>`)}
+    <div class="post-media">
+      <div class="facecard"><span class="av">RV</span>Renato Valadares, apresentador</div>
+      ${hs("lucro",`<div class="big">"Eu ganho R$ 4.000 por semana sem sair de casa. É garantido."</div>`)}
+      ${hs("sync",`<div class="cap">Legenda automática · a boca não acompanha a fala em vários trechos</div>`)}
+    </div>
+    <div class="post-body">
+      <div>O aplicativo que os bancos não querem que você conheça. Vagas limitadas até meia-noite!</div>
+      ${hs("link",`<div class="cta">Quero participar · bit.ly/rv-lucro24</div>`)}
+      <div class="ph-sub">Comentários desativados para esta publicação</div>
+    </div>
+  </div>`,
+  flags:{
+    perfil:{red:true,t:"Perfil recém-criado e sem verificação",d:"Celebridades anunciam por perfis oficiais e antigos. Uma conta de 6 dias com nome genérico é sinal forte de fraude."},
+    lucro:{red:true,t:"Lucro alto e garantido",d:"Nenhum investimento sério promete ganho garantido. Essa frase sozinha já basta para desconfiar."},
+    sync:{red:true,t:"Boca fora de sincronia",d:"Em vídeos deepfake é comum a boca e a voz não baterem, o rosto ficar borrado nas bordas ou o piscar parecer estranho."},
+    link:{red:true,t:"Link encurtado e prazo curto",d:"Link encurtado esconde o destino real e o prazo até meia-noite serve para você não pensar antes de clicar."}
+  },
+  todo:"Procure a notícia no perfil oficial da pessoa ou em portais de notícia conhecidos. Denuncie o anúncio na própria rede social e nunca faça depósito em plataforma indicada por propaganda."
+},
+{
+  id:"banco", title:"O alerta do banco", tipo:"Mensagem legítima",
+  context:"Pedro tentou entrar no aplicativo do banco pelo notebook novo e, logo depois, recebeu este SMS.",
+  golpe:false,
+  mock:()=>`
+  <div class="phone">
+    <div class="ph-head"><div class="av">B</div><div><div class="ph-name">Banco Aurora</div><div class="ph-sub">SMS · número curto 29070</div></div></div>
+    <div class="chat">
+      ${hs("contexto",`<div class="msg">Banco Aurora: identificamos um acesso a sua conta em um novo dispositivo (Windows, São Paulo) hoje às 09:41. <small>09:42</small></div>`)}
+      ${hs("semlink",`<div class="msg">Se foi você, nenhuma ação é necessária. Se não reconhece, abra o aplicativo oficial e vá em Segurança &gt; Dispositivos. Não enviamos links nem pedimos senhas por SMS. <small>09:42</small></div>`)}
+    </div>
+  </div>`,
+  flags:{
+    contexto:{red:false,t:"Bate com o que aconteceu",d:"O alerta descreve exatamente a ação que Pedro acabou de fazer, com data, hora e aparelho."},
+    semlink:{red:false,t:"Sem link e sem pedido de dados",d:"A mensagem manda abrir o aplicativo oficial por conta própria e não pede senha, código nem clique. É assim que um aviso legítimo costuma ser."}
+  },
+  todo:"Mesmo em mensagens que parecem legítimas, prefira sempre abrir o aplicativo oficial digitando você mesmo, em vez de seguir qualquer instrução de link."
+},
+{
+  id:"selfie", title:"A selfie para liberar o benefício", tipo:"Roubo de biometria facial",
+  context:"Seu Antônio, aposentado, recebe esta mensagem dizendo que tem um valor a receber.",
+  golpe:true,
+  mock:()=>`
+  <div class="phone">
+    <div class="ph-head"><div class="av">AD</div><div><div class="ph-name">Central Auxílio Digital</div><div class="ph-sub">Conta comercial</div></div></div>
+    <div class="chat">
+      <div class="msg">Sr. Antônio, consta um valor de R$ 3.240,00 liberado no seu CPF. Para receber, precisamos validar sua identidade. <small>10:15</small></div>
+      ${hs("selfie",`<div class="msg">Envie uma selfie segurando seu documento com foto, frente e verso. <small>10:15</small></div>`)}
+      ${hs("video",`<div class="msg">Depois grave um vídeo curto virando o rosto devagar para os lados e piscando duas vezes. <small>10:16</small></div>`)}
+      ${hs("site",`<div class="msg">Ou faça pelo site: <span class="mono">auxilio-digital-cadastro.top/validar</span> <small>10:16</small></div>`)}
+    </div>
+  </div>`,
+  flags:{
+    selfie:{red:true,t:"Selfie com documento",d:"Com essa foto, criminosos abrem contas e pedem empréstimos no seu nome."},
+    video:{red:true,t:"Vídeo de prova de vida",d:"Virar o rosto e piscar é exatamente o que os bancos pedem na biometria. Esse vídeo pode ser usado para enganar o reconhecimento facial ou treinar uma IA com o seu rosto."},
+    site:{red:true,t:"Endereço estranho",d:"Órgãos públicos usam domínio .gov.br. Terminação como .top, com hífens e palavras soltas, é típica de site falso."}
+  },
+  todo:"Nunca envie selfie com documento nem vídeo do rosto por mensagem. Benefícios reais são consultados no aplicativo ou site oficial do órgão, acessado digitando o endereço."
+},
+{
+  id:"email", title:"O pedido retido", tipo:"Phishing escrito por IA",
+  context:"Camila fez uma compra online na semana passada e recebe este e-mail, sem nenhum erro de português.",
+  golpe:true,
+  mock:()=>`
+  <div class="mail">
+    <div class="mail-head">
+      <div class="mail-subj">Seu pedido #48213 está retido</div>
+      ${hs("remet",`<div class="ph-sub">De: Loja Prisma &lt;atendimento@prisma-pedidos-confirma.com&gt;</div>`)}
+    </div>
+    <div class="mail-body">
+      <div>Olá, Camila. Esperamos que esteja bem!</div>
+      <div>Seu pedido foi retido na fiscalização e há uma taxa de regularização pendente de <b>R$ 37,90</b>.</div>
+      ${hs("prazo",`<div>Para evitar a devolução ao remetente, o pagamento deve ser feito em até <b>2 horas</b>.</div>`)}
+      ${hs("botao",`<div><div class="mail-btn">Regularizar meu pedido</div><div class="url">Destino ao passar o mouse: http://prisma-taxa.click/pg?id=48213</div></div>`)}
+      ${hs("texto",`<div>Agradecemos a compreensão e seguimos à disposição. Equipe Prisma.</div>`)}
+    </div>
+  </div>`,
+  flags:{
+    remet:{red:true,t:"Remetente com domínio parecido",d:"O nome diz Loja Prisma, mas o endereço é um domínio montado com palavras soltas. Confira sempre o que vem depois do @."},
+    prazo:{red:true,t:"Prazo curtíssimo",d:"Duas horas para pagar é pressão para você agir sem checar."},
+    botao:{red:true,t:"Botão leva para outro site",d:"O texto do botão não diz para onde ele vai. Passando o mouse aparece um endereço que não tem nada a ver com a loja."},
+    texto:{red:false,t:"Texto bem escrito não prova nada",d:"Com IA generativa, golpistas escrevem sem erros. Hoje o português correto deixou de ser sinal de mensagem verdadeira, e por isso este trecho sozinho não é a pista."}
+  },
+  todo:"Abra o site ou aplicativo da loja por conta própria e veja o status do pedido lá. Taxas de importação reais aparecem no rastreio oficial, nunca em link enviado por e-mail."
+},
+{
+  id:"imagem", title:"A foto que todo mundo compartilhou", tipo:"Imagem gerada por IA",
+  context:"Num grupo de família, chega esta imagem com a mensagem: URGENTE, olha o que aconteceu no centro hoje!",
+  golpe:true,
+  mock:()=>`
+  <div class="post">
+    <div class="post-head"><div class="av">GF</div><div><div class="ph-name">Família Souza 💬</div><div class="ph-sub">Encaminhada com frequência</div></div></div>
+    <div style="position:relative">
+      <svg viewBox="0 0 400 300" role="img" aria-label="Ilustração de uma imagem falsa de prédio em chamas" style="display:block;width:100%;height:auto">
+        <rect width="400" height="300" fill="#f2a65a"/>
+        <rect y="180" width="400" height="120" fill="#6b6b6b"/>
+        <circle cx="70" cy="60" r="26" fill="#ffe08a"/>
+        <rect x="150" y="70" width="130" height="110" fill="#8d6e63"/>
+        <polygon points="150,70 215,30 280,70" fill="#5d4037"/>
+        <path d="M170 70 q15 -50 30 -10 q10 -40 25 0 q15 -45 30 5 z" fill="#e85d04"/>
+        <rect x="170" y="100" width="20" height="28" fill="#3e2723"/><rect x="240" y="100" width="20" height="28" fill="#3e2723"/>
+        <g fill="#263238"><rect x="80" y="200" width="10" height="34"/><circle cx="85" cy="194" r="7"/></g>
+        <polygon points="90,234 140,240 140,246 90,240" fill="rgba(0,0,0,.35)"/>
+        <g fill="#263238"><rect x="320" y="205" width="10" height="34"/><circle cx="325" cy="199" r="7"/></g>
+        <polygon points="320,239 270,245 270,251 320,245" fill="rgba(0,0,0,.35)"/>
+        <rect x="185" y="190" width="60" height="22" fill="#fff"/>
+        <text x="215" y="206" text-anchor="middle" font-family="monospace" font-size="9" fill="#333">BlBLlOTEKA</text>
+      </svg>
+      ${hs("placa",`<span class="sr">Placa do prédio</span>`,"position:absolute;left:44%;top:60%;width:18%;height:12%")}
+      ${hs("sombra",`<span class="sr">Pessoas e sombras</span>`,"position:absolute;left:17%;top:62%;width:22%;height:24%")}
+        </div>
+    <div class="post-body">
+      ${hs("fonte",`<div>URGENTE!! Pegou fogo na biblioteca histórica do centro agora de manhã, repassem pra todo mundo!!! (sem link, sem nome de jornal)</div>`)}
+    </div>
+  </div>`,
+  flags:{
+    placa:{red:true,t:"Letras deformadas",d:"Geradores de imagem costumam errar texto. Placas e letreiros com letras trocadas ou sem sentido são uma pista clássica."},
+    sombra:{red:true,t:"Sombras para lados opostos",d:"Há um só sol na cena, mas as sombras das duas pessoas apontam em direções contrárias. A IA monta a cena sem entender a física da luz."},
+    fonte:{red:true,t:"Sem fonte nenhuma",d:"Notícia grave sem link, sem veículo e com pedido para repassar é o formato típico de desinformação."}
+  },
+  todo:"Antes de encaminhar, procure o assunto em sites de notícia conhecidos e faça uma busca reversa da imagem. Se ninguém mais noticiou, não repasse."
+},
+{
+  id:"neto", title:"O neto pedindo carona", tipo:"Mensagem legítima",
+  context:"Dona Lurdes recebe esta mensagem do neto, que ela já tem salvo no celular há anos.",
+  golpe:false,
+  mock:()=>`
+  <div class="phone">
+    <div class="ph-head"><div class="av">G</div>${hs("salvo",`<div><div class="ph-name">Gabriel (neto)</div><div class="ph-sub">Contato salvo · conversas desde 2021</div></div>`)}</div>
+    <div class="chat">
+      <div class="sys">ONTEM</div>
+      <div class="msg">Vó, amanhã passo aí no almoço, tá? <small>19:20</small></div>
+      <div class="msg out">Vou fazer aquele macarrão 😊 <small>19:31</small></div>
+      <div class="sys">HOJE</div>
+      ${hs("pedido",`<div class="msg">Vó, vou sair um pouco mais tarde da faculdade, chego aí umas 13h. Pode me ligar se precisar <small>11:08</small></div>`)}
+    </div>
+  </div>`,
+  flags:{
+    salvo:{red:false,t:"Contato salvo e histórico antigo",d:"O número é o mesmo de sempre e a conversa continua um assunto que os dois já tinham combinado."},
+    pedido:{red:false,t:"Nenhum pedido de dinheiro ou dado",d:"Não há urgência, valor ou link, e ele ainda oferece contato por ligação. Nada aqui indica golpe."}
+  },
+  todo:"Desconfiar de tudo também atrapalha. O segredo é olhar o conjunto: número conhecido, assunto coerente e nenhum pedido de dinheiro ou dado sensível."
+}
+];
+
+const RANKS=[[0,"Recruta"],[45,"Investigador"],[70,"Detetive"],[90,"Perito em deepfakes"]];
+const CHECK=[
+ "Desconfiar de qualquer pedido de dinheiro com urgência, mesmo com voz ou rosto conhecidos",
+ "Confirmar por outro canal: ligar para o número antigo ou falar com alguém próximo",
+ "Combinar uma palavra-segura com a família",
+ "Nunca enviar selfie com documento ou vídeo do rosto por mensagem",
+ "Conferir remetente, domínio e destino dos links antes de clicar",
+ "Pesquisar em fontes confiáveis antes de compartilhar fotos e vídeos impactantes"
+];
+
+let st={i:0,xp:0,marked:new Set(),log:[],phase:"intro"};
+const $=s=>document.querySelector(s);
+const app=$("#app");
+
+function hs(id,inner,style){return `<button type="button" class="hs" data-id="${id}" aria-pressed="false"${style?` style="${style}"`:''}>${inner}</button>`}
+function wave(n){let s="";for(let k=0;k<n;k++){s+=`<i style="height:${6+Math.round(Math.abs(Math.sin(k*1.7))*14)}px"></i>`}return s}
+
+function setTop(){
+  const inGame=st.phase!=="intro";
+  $("#stats").hidden=!inGame; $("#prog").hidden=!inGame;
+  $("#sCase").textContent=Math.min(st.i+1,CASES.length); $("#sTotal").textContent=CASES.length;
+  $("#sXp").textContent=st.xp;
+  $("#progBar").style.width=(st.phase==="final"?100:(st.i/CASES.length*100))+"%";
+}
+
+function intro(){
+  st={i:0,xp:0,marked:new Set(),log:[],phase:"intro"};setTop();
+  app.innerHTML=`
+  <section class="intro fadein">
+    <div>
+      <span class="label">Treino de percepção · 7 casos · 10 minutos</span>
+      <h1 style="margin-top:10px">A voz é da sua mãe. <em>O pedido não.</em></h1>
+      <p class="lede">A inteligência artificial já copia vozes, rostos e textos. Neste jogo você recebe mensagens, anúncios e fotos baseados em golpes reais e precisa descobrir o que é fraude antes de cair nela.</p>
+      <ol class="steps">
+        <li><span>Analise a evidência e toque nos detalhes que parecem suspeitos.</span></li>
+        <li><span>Dê o seu veredito: é golpe ou parece legítimo?</span></li>
+        <li><span>Veja as pistas que encontrou, as que deixou passar e o que fazer na vida real.</span></li>
+      </ol>
+      <button class="btn btn-main" id="start">Abrir o primeiro caso →</button>
+    </div>
+    <aside class="dossier" aria-label="Lista de casos">
+      <h3 class="label">Arquivo de casos</h3>
+      <ul class="case-list">${CASES.map((c,k)=>`<li><span>${String(k+1).padStart(2,"0")} · ${c.title}</span><span>${c.tipo}</span></li>`).join("")}</ul>
+    </aside>
+  </section>`;
+  $("#start").onclick=()=>{st.phase="case";renderCase()};
+}
+
+function renderCase(){
+  const c=CASES[st.i]; st.marked=new Set(); setTop();
+  app.innerHTML=`
+  <section class="case fadein">
+    <div class="evidence" id="ev"><span class="ev-tag">EVIDÊNCIA ${String(st.i+1).padStart(2,"0")}</span>${c.mock()}</div>
+    <div class="brief">
+      <span class="label">${c.tipo}</span>
+      <h2>${c.title}</h2>
+      <p>${c.context}</p>
+      <div class="hint"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><span>Toque nos trechos da evidência que te deixam com o pé atrás. Cada pista certa vale pontos, mas marcar o que está normal tira pontos.</span></div>
+      <div class="counter">Trechos marcados: <b id="cnt">0</b></div>
+      <div class="verdict" id="verdict">
+        <button class="btn btn-main" data-v="1">É golpe</button>
+        <button class="btn btn-ghost" data-v="0">Parece legítimo</button>
+      </div>
+      <div id="fb"></div>
+    </div>
+  </section>`;
+  app.querySelectorAll(".hs").forEach(b=>b.onclick=()=>{
+    if(st.phase!=="case")return;
+    const id=b.dataset.id;
+    if(st.marked.has(id)){st.marked.delete(id);b.classList.remove("marked");b.setAttribute("aria-pressed","false")}
+    else{st.marked.add(id);b.classList.add("marked");b.setAttribute("aria-pressed","true")}
+    $("#cnt").textContent=st.marked.size;
+  });
+  app.querySelectorAll("#verdict .btn").forEach(b=>b.onclick=()=>judge(b.dataset.v==="1"));
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+
+function judge(saidGolpe){
+  const c=CASES[st.i]; st.phase="reveal";
+  const right=saidGolpe===c.golpe;
+  let pts=right?100:0, found=0, reds=0, falses=0;
+  const items=[];
+  for(const [id,f] of Object.entries(c.flags)){
+    const m=st.marked.has(id), el=app.querySelector(`.hs[data-id="${id}"]`);
+    if(f.red){reds++; if(m){found++;pts+=30;el.classList.add("r-found");items.push(["red",f,"Você encontrou"])} else {el.classList.add("r-miss");items.push(["red",f,"Passou batido"])}}
+    else{ if(m){falses++;pts-=15;el.classList.add("r-false");items.push(["amber",f,"Marcado sem necessidade"])} else {el.classList.add("r-okseen");items.push(["green",f,"Sinal de confiança"])}}
+    el.classList.remove("marked");
+  }
+  pts=Math.max(0,pts); st.xp+=pts;
+  const max=100+reds*30;
+  st.log.push({title:c.title,right,pts,max});
+  $("#ev").classList.add("reveal"); $("#verdict").hidden=true; setTop();
+  const head=right
+    ? `<div class="fb-head good"><span class="ico">✓</span><div><h3>${c.golpe?"Isso mesmo, era golpe.":"Isso mesmo, era legítimo."}</h3><p>${c.golpe?`Você achou ${found} de ${reds} pistas.`:"Você não caiu na armadilha de desconfiar de tudo."}</p></div></div>`
+    : `<div class="fb-head bad"><span class="ico">!</span><div><h3>${c.golpe?"Cuidado, isso era golpe.":"Essa era verdadeira."}</h3><p>${c.golpe?"Na vida real, esse é o momento em que o dinheiro ou os dados vão embora.":"Desconfiar é bom, mas aqui todos os sinais eram de uma mensagem legítima."}</p></div></div>`;
+  $("#fb").innerHTML=`
+  <div class="fb fadein">
+    ${head}
+    <div class="pts">+${pts} XP neste caso${falses?` (−${falses*15} por marcações erradas)`:""}</div>
+    <ul class="flags">${items.map(([cl,f,tag])=>`<li><span class="dot ${cl}"></span><span><b>${f.t} · <span class="label" style="font-size:11px">${tag}</span></b>${f.d}</span></li>`).join("")}</ul>
+    <div class="todo"><h4>O que fazer na vida real</h4><p>${c.todo}</p></div>
+    <div><button class="btn btn-main" id="next">${st.i<CASES.length-1?"Próximo caso →":"Ver meu resultado →"}</button></div>
+  </div>`;
+  $("#next").onclick=()=>{st.i++; if(st.i<CASES.length){st.phase="case";renderCase()} else final()};
+  $("#fb").scrollIntoView({behavior:"smooth",block:"start"});
+}
+
+function final(){
+  st.phase="final"; setTop();
+  const max=st.log.reduce((a,l)=>a+l.max,0), pct=Math.round(st.xp/max*100);
+  const rank=RANKS.filter(r=>pct>=r[0]).pop()[1];
+  const hits=st.log.filter(l=>l.right).length;
+  let best=0; try{best=+localStorage.getItem("ddf-best")||0; if(st.xp>best){localStorage.setItem("ddf-best",st.xp)}}catch(e){}
+  app.innerHTML=`
+  <section class="final fadein">
+    <div>
+      <span class="label">Resultado da investigação</span>
+      <div class="score" style="margin-top:8px">${st.xp}<span style="font-size:.35em;color:var(--muted)"> / ${max} XP</span></div>
+      <div class="rank">${rank}</div>
+      <p style="color:var(--muted);margin:14px 0 0">Você acertou o veredito em ${hits} de ${CASES.length} casos${best&&best>st.xp?` · seu recorde é ${best} XP`:""}.</p>
+      <ul class="result-list">${st.log.map(l=>`<li><span>${l.right?"✓":"✗"} ${l.title}</span><span class="mono">${l.pts}/${l.max}</span></li>`).join("")}</ul>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:20px">
+        <button class="btn btn-main" id="again">Jogar de novo</button>
+      </div>
+    </div>
+    <div class="dossier">
+      <h3 class="label">Checklist para levar para a vida</h3>
+      <ul class="check">${CHECK.map((t,k)=>`<li><label for="ck${k}"><input type="checkbox" id="ck${k}"><span>${t}</span></label></li>`).join("")}</ul>
+      <p style="font-size:13px;color:var(--muted);margin:16px 0 0">Na plataforma MackSeguro, esta etapa libera o badge da trilha Deepfakes e IA Generativa.</p>
+    </div>
+  </section>`;
+  $("#again").onclick=intro;
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+
+intro();
+</script>
+</body></html>
